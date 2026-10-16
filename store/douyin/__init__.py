@@ -140,12 +140,12 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
         "create_time": comment_item.get("create_time"),
         "aweme_id": aweme_id,
         "content": comment_item.get("text"),
-        "ip_label": comment_item.get("ip_label"),
         "sec_uid": anonymize_user_id(user_info.get("sec_uid")),  # 创作者匿名哈希(不存原始 uid)
         "uid": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
         "unique_id": anonymize_user_id(user_info.get("unique_id")),  # 创作者匿名哈希(不存原始 uid)
         "short_id": anonymize_user_id(user_info.get("short_id")),  # 创作者匿名哈希(不存原始 uid)
         "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "ip_label": comment_item.get("ip_label"),
         "sub_comment_count": str(comment_item.get("reply_comment_total", 0)),
         "like_count": (comment_item.get("digg_count") if comment_item.get("digg_count") else 0),
         "last_modify_ts": utils.get_current_timestamp(),
@@ -170,6 +170,7 @@ async def save_creator(user_id: str, creator: Dict):
         "unique_id": anonymize_user_id(user_info.get("unique_id")),  # 创作者匿名哈希(不存原始 uid)
         "short_id": anonymize_user_id(user_info.get("short_id")),  # 创作者匿名哈希(不存原始 uid)
         "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "ip_location": user_info.get("ip_location"),
         "iso_country_code": user_info.get("iso_country_code"),
         "store_region": user_info.get("store_region"),
         "country": user_info.get("country"),
