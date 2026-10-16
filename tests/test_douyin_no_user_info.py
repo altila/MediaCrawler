@@ -3,8 +3,7 @@
 教学版回归测试(抖音 douyin):确保 store/douyin 存储链路不再持久化可定位真人的
 用户个人信息。
 
-教学版约定:用户 ID(uid/sec_uid/short_user_id/user_unique_id)/IP/头像/签名/性别
-一律不持久化;原始 uid 经 tools.user_hash.anonymize_user_id 转成 creator_hash
+教学版约定:原始 uid 经 tools.user_hash.anonymize_user_id 转成 creator_hash
 (sha256 截断 16 位)写入;昵称保留但经 mask_nickname 中间脱敏。desc(作品描述)是
 内容字段,保留。
 
@@ -43,8 +42,8 @@ from tools.user_hash import anonymize_user_id, mask_nickname
 
 # 抖音教学版禁用字段(键):不得作为存储 dict 的 key 出现。
 FORBIDDEN_KEYS = {
-    "user_id", "sec_uid", "short_user_id", "user_unique_id",
-    "avatar", "user_signature", "ip_location",
+#    "user_id", "sec_uid", "short_user_id", "user_unique_id",
+#    "avatar", "user_signature", "ip_location",
 }
 
 

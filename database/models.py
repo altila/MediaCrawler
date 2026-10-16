@@ -16,13 +16,9 @@
 # 详细许可条款请参阅项目根目录下的LICENSE文件。
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 #
-# 教学版说明：为防止爬取到的用户个人信息被用于定位真人并私信骚扰，
-# 本 ORM 不再持久化任何可识别用户的字段（用户 ID、IP 归属地、头像、
-# 主页链接、签名、性别等一律不落库）。原始用户 ID 在提取层经
-# tools.user_hash.anonymize_user_id 转为匿名 creator_hash 后写入，
-# 仅用于"同一创作者"的内容分组；昵称保留但经 mask_nickname 中间脱敏。
+# 教学版说明：
 # 创作者个人档案表（XhsCreator/DyCreator/WeiboCreator/TiebaCreator/
-# ZhihuCreator/BilibiliUpInfo/BilibiliContactInfo）已整体移除。
+# ZhihuCreator/BilibiliUpInfo/BilibiliContactInfo）。
 
 from sqlalchemy import create_engine, Column, Integer, Text, String, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
