@@ -21,9 +21,11 @@
 from __future__ import annotations
 
 
+import csv
 import sys
 import re
 from enum import Enum
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Iterable, Optional, Sequence, Type, TypeVar
 
@@ -149,6 +151,61 @@ def _normalize_tieba_creator_url(value: str) -> str:
     if value.startswith("http://") or value.startswith("https://"):
         return value
     return f"https://tieba.baidu.com/home/main?id={value}"
+
+
+# 单列 CSV 中常见的表头别名，命中则跳过该行
+_CREATOR_CSV_HEADER_ALIASES = {
+    "sec_uid",
+    "sec_user_id",
+    "creator_id",
+    "creator_url",
+    "user_url",
+    "url",
+}
+
+
+def _load_creator_ids_from_csv(file_path: str) -> list[str]:
+    """从单列 CSV 文件中读取创作者 sec_uid / 主页 URL 列表。
+
+    规则：
+    - 仅取第一列，自动剥离 BOM（utf-8-sig）
+    - 跳过空行、以 # 开头的注释行、以及首个有效值若是表头
+    - 去重并保留原始顺序
+    """
+    csv_path = Path(file_path).expanduser()
+    if not csv_path.is_file():
+        typer.secho(
+            f"❌ 创作者列表文件不存在或不是文件: {csv_path}",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    creator_ids: list[str] = []
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
+        for row in csv.reader(csv_file):
+            if not row:
+                continue
+            value = row[0].strip()
+            if not value or value.startswith("#"):
+                continue
+            # 仅对首个有效值做表头判定，避免误删真实数据
+            if not creator_ids and value.lower() in _CREATOR_CSV_HEADER_ALIASES:
+                continue
+            creator_ids.append(value)
+
+    if not creator_ids:
+        typer.secho(
+            f"❌ 创作者列表文件未解析到任何有效内容: {csv_path}",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    deduped = list(dict.fromkeys(creator_ids))
+    typer.secho(
+        f"✅ 已从 {csv_path} 读取 {len(deduped)} 个创作者（去重前 {len(creator_ids)} 个）",
+        fg=typer.colors.GREEN,
+    )
+    return deduped
 
 
 async def parse_cmd(argv: Optional[Sequence[str]] = None):
@@ -281,7 +338,15 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             str,
             typer.Option(
                 "--creator_id",
-                help="Creator ID list in creator mode, multiple IDs separated by commas (supports full URL or ID)",
+                help="Creator ID list in creator mode, multiple IDs separated by commas (supports full URL or ID). Merged and deduplicated with --creator_id_file_path if both are provided.",
+                rich_help_panel="Basic Configuration",
+            ),
+        ] = "",
+        creator_id_file_path: Annotated[
+            str,
+            typer.Option(
+                "--creator_id_file_path",
+                help="Creator list CSV file path in creator mode (single column: sec_uid or homepage URL). Merged and deduplicated with --creator_id if both are provided.",
                 rich_help_panel="Basic Configuration",
             ),
         ] = "",
@@ -363,7 +428,13 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
 
         # Parse specified_id and creator_id into lists
         specified_id_list = [id.strip() for id in specified_id.split(",") if id.strip()] if specified_id else []
+
         creator_id_list = [id.strip() for id in creator_id.split(",") if id.strip()] if creator_id else []
+
+        if creator_id_file_path:
+            # 与 --creator_id 可同时使用：CSV 内容在前，合并后统一去重（保留首次出现顺序）
+            creator_id_list = _load_creator_ids_from_csv(creator_id_file_path) + creator_id_list
+            creator_id_list = list(dict.fromkeys(creator_id_list))
 
         # override global config
         config.PLATFORM = platform.value
@@ -439,6 +510,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             cookies=config.COOKIES,
             specified_id=specified_id,
             creator_id=creator_id,
+            creator_id_file_path=creator_id_file_path,
         )
 
     command = typer.main.get_command(app)
