@@ -52,6 +52,16 @@ HEADLESS = False
 # Whether to save login status
 SAVE_LOGIN_STATE = True
 
+# 是否启用用户信息匿名化/脱敏，默认开启。
+# 开启后：
+# 1. 原始用户 ID 会转为 creator_hash
+# 2. 昵称会做中间脱敏
+# 关闭后：
+# 1. anonymize_user_id() 将返回原始用户 ID
+# 2. mask_nickname() 将返回原始昵称
+# 说明：这是一个全局开关，会影响所有平台的内容/评论存储字段映射。
+ENABLE_ANONYMIZATION = False
+
 # ==================== CDP (Chrome DevTools Protocol) 配置 ====================
 # 是否启用 CDP 模式 - 使用用户本地的 Chrome/Edge 浏览器进行爬取，具有更好的反检测能力
 # 开启后，会自动检测并启动用户的 Chrome/Edge 浏览器，通过 CDP 协议进行控制

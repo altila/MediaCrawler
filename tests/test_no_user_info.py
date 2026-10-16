@@ -96,6 +96,16 @@ def test_mask_and_hash_tools():
     assert mask_nickname("a") == "*"
 
 
+def test_mask_and_hash_tools_can_be_disabled(monkeypatch):
+    import config
+    from tools.user_hash import anonymize_user_id, mask_nickname
+
+    monkeypatch.setattr(config, "ENABLE_ANONYMIZATION", False)
+
+    assert anonymize_user_id("12345") == "12345"
+    assert mask_nickname("张三丰") == "张三丰"
+
+
 def test_xhs_note_extraction_masks_user_info():
     import asyncio
     import store.xhs as xs
