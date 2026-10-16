@@ -21,6 +21,7 @@
 # @Author  : relakkes@gmail.com
 # @Time    : 2024/1/14 18:46
 # @Desc    :
+import json
 from typing import List
 
 import config
@@ -139,8 +140,10 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
         "create_time": comment_item.get("create_time"),
         "aweme_id": aweme_id,
         "content": comment_item.get("text"),
+        "ip_label": comment_item.get("ip_label"),
         "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
         "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "sec_uid": user_info.get("sec_uid"),
         "sub_comment_count": str(comment_item.get("reply_comment_total", 0)),
         "like_count": (comment_item.get("digg_count") if comment_item.get("digg_count") else 0),
         "last_modify_ts": utils.get_current_timestamp(),
@@ -153,5 +156,30 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
 
 
 async def save_creator(user_id: str, creator: Dict):
-    # 教学版：创作者个人资料(昵称/性别/头像/签名/IP/粉丝数等)不再落库，防骚扰。
-    return
+    user_info = creator.get("user") or {}
+    if not user_info:
+        # 说明响应里没有用户对象(键名变化/被风控)，打印顶层键便于定位
+        utils.logger.warning(
+            f"[store.douyin.save_creator] user_info is empty, response top-level keys: {list(creator.keys())}"
+        )
+    save_creator_item = {
+        "sec_uid": anonymize_user_id(user_info.get("sec_uid")),  # 创作者匿名哈希(不存原始 uid)
+        "uid": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
+        "unique_id": anonymize_user_id(user_info.get("unique_id")),  # 创作者匿名哈希(不存原始 uid)
+        "short_id": anonymize_user_id(user_info.get("short_id")),  # 创作者匿名哈希(不存原始 uid)
+        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "iso_country_code": user_info.get("iso_country_code"),
+        "store_region": user_info.get("store_region"),
+        "country": user_info.get("country"),
+        "province": user_info.get("province"),
+        "city": user_info.get("city"),
+        "district": user_info.get("district"),
+        "gender": user_info.get("gender"),
+        "signature": user_info.get("signature"),
+        "aweme_count": user_info.get("aweme_count"),
+        "follower_count": user_info.get("follower_count"),
+        "following_count": user_info.get("following_count"),
+        "total_favorited": user_info.get("total_favorited"),
+    }
+    utils.logger.info(f"[store.douyin.save_creator] douyin creator: {save_creator_item.get('nickname')}")
+    await DouyinStoreFactory.create_store().store_creator(save_creator_item)
