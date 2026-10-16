@@ -120,6 +120,10 @@ MAX_CONCURRENCY_NUM = 1
 # 命令行开关：--get_media
 ENABLE_GET_MEDIA = False
 
+# 是否采集并保存作品内容，默认开启
+# 命令行开关：--get_content
+ENABLE_GET_CONTENT = True
+
 # Whether to enable comment crawling mode. Comment crawling is enabled by default.
 ENABLE_GET_COMMENTS = True
 

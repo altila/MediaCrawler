@@ -220,6 +220,10 @@ class DouYinCrawler(AbstractCrawler):
 
     async def get_aweme_detail(self, aweme_id: str, semaphore: asyncio.Semaphore) -> Any:
         """Get note detail"""
+        if not config.ENABLE_GET_CONTENT:
+            utils.logger.info(f"[DouYinCrawler.get_aweme_detail] Crawling content mode is not enabled")
+            return None
+
         async with semaphore:
             try:
                 result = await self.dy_client.get_video_by_id(aweme_id)
