@@ -291,6 +291,13 @@ class DouYinCrawler(AbstractCrawler):
                 if creator_info:
                     await douyin_store.save_creator(user_id, creator=creator_info)
 
+                # 每个创作者抓取完成后休眠，避免请求过快触发风控
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+
+                if not config.ENABLE_GET_CONTENT:
+                    utils.logger.info(f"[DouYinCrawler.get_creators_and_videos] Crawling content mode is not enabled")
+                    continue
+
                 # Get all video information of the creator
                 all_video_list = await self.dy_client.get_all_user_aweme_posts(
                     sec_user_id=user_id,
@@ -300,8 +307,6 @@ class DouYinCrawler(AbstractCrawler):
 
                 video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
                 await self.batch_get_note_comments(video_ids)
-                # 每个创作者抓取完成后休眠，避免请求过快触发风控
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
             except DataFetchError as e:
                 # 命中风控（如 account blocked）时跳出循环，不再抓取后续创作者，
                 # 让 start() 正常返回，以便已抓取的数据能正常落盘。
