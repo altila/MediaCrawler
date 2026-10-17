@@ -220,10 +220,6 @@ class DouYinCrawler(AbstractCrawler):
 
     async def get_aweme_detail(self, aweme_id: str, semaphore: asyncio.Semaphore) -> Any:
         """Get note detail"""
-        if not config.ENABLE_GET_CONTENT:
-            utils.logger.info(f"[DouYinCrawler.get_aweme_detail] Crawling content mode is not enabled")
-            return None
-
         async with semaphore:
             try:
                 result = await self.dy_client.get_video_by_id(aweme_id)
@@ -290,15 +286,30 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.error(f"[DouYinCrawler.get_creators_and_videos] Failed to parse creator URL: {e}")
                 continue
 
-            creator_info: Dict = await self.dy_client.get_user_info(user_id)
-            if creator_info:
-                await douyin_store.save_creator(user_id, creator=creator_info)
+            try:
+                creator_info: Dict = await self.dy_client.get_user_info(user_id)
+                if creator_info:
+                    await douyin_store.save_creator(user_id, creator=creator_info)
 
-            # Get all video information of the creator
-            all_video_list = await self.dy_client.get_all_user_aweme_posts(sec_user_id=user_id, callback=self.fetch_creator_video_detail)
+                # Get all video information of the creator
+                all_video_list = await self.dy_client.get_all_user_aweme_posts(
+                    sec_user_id=user_id,
+                    callback=self.fetch_creator_video_detail,
+                    crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
+                )
 
-            video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
-            await self.batch_get_note_comments(video_ids)
+                video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
+                await self.batch_get_note_comments(video_ids)
+                # 每个创作者抓取完成后休眠，避免请求过快触发风控
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+            except DataFetchError as e:
+                # 命中风控（如 account blocked）时跳出循环，不再抓取后续创作者，
+                # 让 start() 正常返回，以便已抓取的数据能正常落盘。
+                utils.logger.error(
+                    f"[DouYinCrawler.get_creators_and_videos] Data fetch blocked, stop crawling. "
+                    f"sec_user_id: {user_id}, error: {e}"
+                )
+                break
 
     async def fetch_creator_video_detail(self, video_list: List[Dict]):
         """

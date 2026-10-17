@@ -354,7 +354,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         }
         return await self.get(uri, params)
 
-    async def get_all_user_aweme_posts(self, sec_user_id: str, callback: Optional[Callable] = None):
+    async def get_all_user_aweme_posts(self, sec_user_id: str, callback: Optional[Callable] = None, crawl_interval: float = 1.0):
         posts_has_more = 1
         max_cursor = ""
         result = []
@@ -367,6 +367,8 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             if callback:
                 await callback(aweme_list)
             result.extend(aweme_list)
+            # 每页抓取后休眠，避免请求过快触发风控
+            await asyncio.sleep(crawl_interval)
         return result
 
     async def resolve_short_url(self, short_url: str) -> str:
