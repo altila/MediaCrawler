@@ -101,13 +101,13 @@ async def update_douyin_aweme(aweme_item: Dict):
         "aweme_type": str(aweme_item.get("aweme_type")),
         "title": aweme_item.get("desc", ""),
         "desc": aweme_item.get("desc", ""),
-        "create_time": aweme_item.get("create_time"),
-        "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
+        "uid": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
         "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
         "liked_count": str(interact_info.get("digg_count")),
         "collected_count": str(interact_info.get("collect_count")),
         "comment_count": str(interact_info.get("comment_count")),
         "share_count": str(interact_info.get("share_count")),
+        "create_time": aweme_item.get("create_time"),
         "last_modify_ts": utils.get_current_timestamp(),
         "aweme_url": f"https://www.douyin.com/video/{aweme_id}",
         "cover_url": extract_cover_url(aweme_item),
@@ -137,17 +137,15 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
     parent_comment_id = comment_item.get("reply_id", "0")
     save_comment_item = {
         "comment_id": comment_id,
-        "create_time": comment_item.get("create_time"),
         "aweme_id": aweme_id,
         "content": comment_item.get("text"),
         "sec_uid": anonymize_user_id(user_info.get("sec_uid")),  # 创作者匿名哈希(不存原始 uid)
         "uid": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
-        "unique_id": anonymize_user_id(user_info.get("unique_id")),  # 创作者匿名哈希(不存原始 uid)
-        "short_id": anonymize_user_id(user_info.get("short_id")),  # 创作者匿名哈希(不存原始 uid)
         "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
         "ip_label": comment_item.get("ip_label"),
         "sub_comment_count": str(comment_item.get("reply_comment_total", 0)),
         "like_count": (comment_item.get("digg_count") if comment_item.get("digg_count") else 0),
+        "create_time": comment_item.get("create_time"),
         "last_modify_ts": utils.get_current_timestamp(),
         "parent_comment_id": parent_comment_id,
         "pictures": ",".join(_extract_comment_image_list(comment_item)),
@@ -178,6 +176,7 @@ async def save_creator(user_id: str, creator: Dict):
         "city": user_info.get("city"),
         "district": user_info.get("district"),
         "gender": user_info.get("gender"),
+        "user_age": user_info.get("user_age"),
         "signature": user_info.get("signature"),
         "aweme_count": user_info.get("aweme_count"),
         "follower_count": user_info.get("follower_count"),

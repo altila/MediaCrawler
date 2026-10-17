@@ -292,7 +292,9 @@ class DouYinCrawler(AbstractCrawler):
                     await douyin_store.save_creator(user_id, creator=creator_info)
 
                 # 每个创作者抓取完成后休眠，避免请求过快触发风控
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                # 固定延时基础上加 1-3 秒随机抖动，降低服务端限流概率
+                sleep_sec = config.CRAWLER_MAX_SLEEP_SEC + random.uniform(2, 5)
+                await asyncio.sleep(sleep_sec)
 
                 if not config.ENABLE_GET_CONTENT:
                     utils.logger.info(f"[DouYinCrawler.get_creators_and_videos] Crawling content mode is not enabled")
@@ -302,7 +304,7 @@ class DouYinCrawler(AbstractCrawler):
                 all_video_list = await self.dy_client.get_all_user_aweme_posts(
                     sec_user_id=user_id,
                     callback=self.fetch_creator_video_detail,
-                    crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
+                    crawl_interval=sleep_sec,
                 )
 
                 video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
