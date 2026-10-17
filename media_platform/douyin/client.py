@@ -20,6 +20,7 @@
 import asyncio
 import copy
 import json
+import random
 import urllib.parse
 from typing import TYPE_CHECKING, Any, Callable, Dict, Union, Optional
 
@@ -308,7 +309,8 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             if callback:  # If there is a callback function, execute the callback function
                 await callback(aweme_id, comments)
 
-            await asyncio.sleep(crawl_interval)
+            # 固定延时基础上加 0.5-1.5 秒随机抖动，降低服务端限流概率
+            await asyncio.sleep(crawl_interval + random.uniform(0.5, 1.5))
             if not is_fetch_sub_comments:
                 continue
             # Get secondary reviews
@@ -331,7 +333,8 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
                         result.extend(sub_comments)
                         if callback:  # If there is a callback function, execute the callback function
                             await callback(aweme_id, sub_comments)
-                        await asyncio.sleep(crawl_interval)
+                        # 固定延时基础上加 0.5-1.5 秒随机抖动，降低服务端限流概率
+                        await asyncio.sleep(crawl_interval + random.uniform(0.5, 1.5))
         return result
 
     async def get_user_info(self, sec_user_id: str):

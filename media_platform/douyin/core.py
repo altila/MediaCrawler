@@ -264,8 +264,10 @@ class DouYinCrawler(AbstractCrawler):
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
                 # Sleep after fetching comments
-                await asyncio.sleep(crawl_interval)
-                utils.logger.info(f"[DouYinCrawler.get_comments] Sleeping for {crawl_interval} seconds after fetching comments for aweme {aweme_id}")
+                # 固定延时基础上加 0.1-0.5 秒随机抖动，降低服务端限流概率
+                sleep_sec = crawl_interval + random.uniform(0.1, 0.5)
+                await asyncio.sleep(sleep_sec)
+                utils.logger.info(f"[DouYinCrawler.get_comments] Sleeping for {sleep_sec} seconds after fetching comments for aweme {aweme_id}")
                 utils.logger.info(f"[DouYinCrawler.get_comments] aweme_id: {aweme_id} comments have all been obtained and filtered ...")
             except DataFetchError as e:
                 utils.logger.error(f"[DouYinCrawler.get_comments] aweme_id: {aweme_id} get comments failed, error: {e}")
