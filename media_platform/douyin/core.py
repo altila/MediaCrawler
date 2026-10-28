@@ -295,7 +295,7 @@ class DouYinCrawler(AbstractCrawler):
 
                 # 每个创作者抓取完成后休眠，避免请求过快触发风控
                 # 固定延时基础上加 1-3 秒随机抖动，降低服务端限流概率
-                sleep_sec = config.CRAWLER_MAX_SLEEP_SEC + random.uniform(2, 5)
+                sleep_sec = config.CRAWLER_MAX_SLEEP_SEC + random.uniform(0.5, 3)
                 await asyncio.sleep(sleep_sec)
 
                 if not config.ENABLE_GET_CONTENT:
