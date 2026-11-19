@@ -122,6 +122,11 @@ async def main() -> None:
 
 async def async_cleanup() -> None:
     global crawler
+
+    # Flush Excel data first so partial crawl results survive Ctrl+C even if
+    # browser cleanup takes time or the crawl task was cancelled.
+    _flush_excel_if_needed()
+
     if crawler:
         if getattr(crawler, "cdp_manager", None):
             try:
