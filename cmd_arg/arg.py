@@ -153,19 +153,24 @@ def _normalize_tieba_creator_url(value: str) -> str:
     return f"https://tieba.baidu.com/home/main?id={value}"
 
 
-# 单列 CSV 中常见的表头别名，命中则跳过该行
-_CREATOR_CSV_HEADER_ALIASES = {
+# 单列 CSV 中常见的表头别名，命中则跳过该行（detail / creator 两种模式共用）
+_CSV_HEADER_ALIASES = {
     "sec_uid",
     "sec_user_id",
     "creator_id",
     "creator_url",
     "user_url",
+    "aweme_id",
+    "note_id",
+    "video_id",
+    "specified_id",
+    "id",
     "url",
 }
 
 
-def _load_creator_ids_from_csv(file_path: str) -> list[str]:
-    """从单列 CSV 文件中读取创作者 sec_uid / 主页 URL 列表。
+def _load_ids_from_csv(file_path: str, *, label: str) -> list[str]:
+    """从单列 CSV 文件中读取 ID / URL 列表。
 
     规则：
     - 仅取第一列，自动剥离 BOM（utf-8-sig）
@@ -175,12 +180,12 @@ def _load_creator_ids_from_csv(file_path: str) -> list[str]:
     csv_path = Path(file_path).expanduser()
     if not csv_path.is_file():
         typer.secho(
-            f"❌ 创作者列表文件不存在或不是文件: {csv_path}",
+            f"❌ {label}列表文件不存在或不是文件: {csv_path}",
             fg=typer.colors.RED,
         )
         raise typer.Exit(code=1)
 
-    creator_ids: list[str] = []
+    ids: list[str] = []
     with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
         for row in csv.reader(csv_file):
             if not row:
@@ -189,20 +194,20 @@ def _load_creator_ids_from_csv(file_path: str) -> list[str]:
             if not value or value.startswith("#"):
                 continue
             # 仅对首个有效值做表头判定，避免误删真实数据
-            if not creator_ids and value.lower() in _CREATOR_CSV_HEADER_ALIASES:
+            if not ids and value.lower() in _CSV_HEADER_ALIASES:
                 continue
-            creator_ids.append(value)
+            ids.append(value)
 
-    if not creator_ids:
+    if not ids:
         typer.secho(
-            f"❌ 创作者列表文件未解析到任何有效内容: {csv_path}",
+            f"❌ {label}列表文件未解析到任何有效内容: {csv_path}",
             fg=typer.colors.RED,
         )
         raise typer.Exit(code=1)
 
-    deduped = list(dict.fromkeys(creator_ids))
+    deduped = list(dict.fromkeys(ids))
     typer.secho(
-        f"✅ 已从 {csv_path} 读取 {len(deduped)} 个创作者（去重前 {len(creator_ids)} 个）",
+        f"✅ 已从 {csv_path} 读取 {len(deduped)} 个{label}（去重前 {len(ids)} 个）",
         fg=typer.colors.GREEN,
     )
     return deduped
@@ -330,7 +335,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             str,
             typer.Option(
                 "--specified_id",
-                help="Post/video ID list in detail mode, multiple IDs separated by commas (supports full URL or ID)",
+                help="Post/video ID list in detail mode, multiple IDs separated by commas (supports full URL or ID). Merged and deduplicated with --file_path if both are provided.",
                 rich_help_panel="Basic Configuration",
             ),
         ] = "",
@@ -338,15 +343,15 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             str,
             typer.Option(
                 "--creator_id",
-                help="Creator ID list in creator mode, multiple IDs separated by commas (supports full URL or ID). Merged and deduplicated with --creator_id_file_path if both are provided.",
+                help="Creator ID list in creator mode, multiple IDs separated by commas (supports full URL or ID). Merged and deduplicated with --file_path if both are provided.",
                 rich_help_panel="Basic Configuration",
             ),
         ] = "",
-        creator_id_file_path: Annotated[
+        file_path: Annotated[
             str,
             typer.Option(
-                "--creator_id_file_path",
-                help="Creator list CSV file path in creator mode (single column: sec_uid or homepage URL). Merged and deduplicated with --creator_id if both are provided.",
+                "--file_path",
+                help="Single-column CSV list file shared by detail/creator modes: aweme_id/note_id/URL for detail, sec_uid/homepage URL for creator. Merged and deduplicated with --specified_id / --creator_id if both are provided.",
                 rich_help_panel="Basic Configuration",
             ),
         ] = "",
@@ -431,10 +436,15 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
 
         creator_id_list = [id.strip() for id in creator_id.split(",") if id.strip()] if creator_id else []
 
-        if creator_id_file_path:
-            # 与 --creator_id 可同时使用：CSV 内容在前，合并后统一去重（保留首次出现顺序）
-            creator_id_list = _load_creator_ids_from_csv(creator_id_file_path) + creator_id_list
-            creator_id_list = list(dict.fromkeys(creator_id_list))
+        if file_path:
+            # --file_path 为 detail / creator 模式共用的单列 CSV：
+            # CSV 内容在前，与对应的 --specified_id / --creator_id 合并后统一去重（保留首次出现顺序）
+            if crawler_type == CrawlerTypeEnum.CREATOR:
+                creator_id_list = _load_ids_from_csv(file_path, label="创作者") + creator_id_list
+                creator_id_list = list(dict.fromkeys(creator_id_list))
+            else:
+                specified_id_list = _load_ids_from_csv(file_path, label="作品") + specified_id_list
+                specified_id_list = list(dict.fromkeys(specified_id_list))
 
         # override global config
         config.PLATFORM = platform.value
@@ -509,8 +519,8 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             init_db=init_db_value,
             cookies=config.COOKIES,
             specified_id=specified_id,
+            file_path=file_path,
             creator_id=creator_id,
-            creator_id_file_path=creator_id_file_path,
         )
 
     command = typer.main.get_command(app)
