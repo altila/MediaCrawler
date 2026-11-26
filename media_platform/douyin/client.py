@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Union, Optional
 
 import httpx
 from playwright.async_api import BrowserContext
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from base.base_crawler import AbstractApiClient
 from proxy.proxy_mixin import ProxyRefreshMixin
@@ -134,12 +135,27 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             a_bogus = await get_a_bogus(uri, query_string, post_data, headers["User-Agent"], self.playwright_page)
             params["a_bogus"] = a_bogus
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(2),
+        retry=retry_if_exception_type(httpx.TransportError),
+        reraise=True,
+    )
     async def request(self, method, url, **kwargs):
         # Check whether the proxy has expired before each request
         await self._refresh_proxy_if_expired()
 
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+        try:
+            async with make_async_client(proxy=self.proxy) as client:
+                response = await client.request(method, url, timeout=self.timeout, **kwargs)
+        except httpx.TransportError as e:
+            # 网络/代理类错误（如系统代理不可用时 TLS 握手失败）可重试，
+            # 由上层决定是跳过当前目标还是终止抓取，避免整个进程崩溃。
+            utils.logger.error(
+                f"[DouYinClient.request] transport error: {type(e).__name__}: {e}, "
+                f"url: {url}, proxy: {self.proxy}"
+            )
+            raise
         try:
             if response.text == "" or response.text == "blocked":
                 utils.logger.error(f"request params incrr, response.text: {response.text}")

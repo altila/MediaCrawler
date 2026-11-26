@@ -23,6 +23,7 @@ import random
 from asyncio import Task
 from typing import Any, Dict, List, Optional, Tuple
 
+import httpx
 from playwright.async_api import (
     BrowserContext,
     BrowserType,
@@ -319,6 +320,14 @@ class DouYinCrawler(AbstractCrawler):
                     f"sec_user_id: {user_id}, error: {e}"
                 )
                 break
+            except httpx.RequestError as e:
+                # 网络/代理类错误（如本地代理不可用导致 TLS 握手失败）：
+                # 跳过当前创作者继续抓取，避免单个请求失败中断整个任务。
+                utils.logger.error(
+                    f"[DouYinCrawler.get_creators_and_videos] Network error, skip creator. "
+                    f"sec_user_id: {user_id}, error: {type(e).__name__}: {e}"
+                )
+                continue
 
     async def fetch_creator_video_detail(self, video_list: List[Dict]):
         """
