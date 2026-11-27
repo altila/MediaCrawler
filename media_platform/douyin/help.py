@@ -24,17 +24,75 @@
 # @Time    : 2024/6/10 02:24
 # @Desc    : Get a_bogus parameter, for learning and communication only, do not use for commercial purposes, contact author to delete if infringement
 
+import os
 import random
 import re
+import shutil
 from typing import Optional
 
 import execjs
+from execjs._external_runtime import ExternalRuntime
+from execjs._runner_sources import Node as _NodeRunnerSource
 from playwright.async_api import Page
 
 from model.m_douyin import VideoUrlInfo, CreatorUrlInfo
 from tools.crawler_util import extract_url_params_to_dict
 
-douyin_sign_obj = execjs.compile(open('libs/douyin.js', encoding='utf-8-sig').read())
+# libs/douyin.js 相对项目根目录定位，避免从其他工作目录启动时找不到签名脚本
+_SIGN_JS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "libs", "douyin.js"
+)
+
+
+def _resolve_node_binary() -> Optional[str]:
+    """
+    显式定位 node 可执行文件，避免 Popen 抛出 PermissionError: [WinError 5]（拒绝访问）。
+    常见的两种踩坑：PATH 里的 node 是 Microsoft Store 的“应用执行别名”
+    （WindowsApps 下的 0 字节 stub），或找到的 node 本身没有执行权限。
+    可用环境变量 MEDIACRAWLER_NODE_BIN 强制指定。
+    """
+    candidates = [
+        os.environ.get("MEDIACRAWLER_NODE_BIN", ""),
+        shutil.which("node") or "",
+        os.path.expandvars(r"%ProgramFiles%\nodejs\node.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\nodejs\node.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\nodejs\node.exe"),
+    ]
+
+    store_alias = None
+    for candidate in candidates:
+        if not candidate or not os.path.isfile(candidate):
+            continue
+        # WindowsApps 下的 node 是应用执行别名，CreateProcess 常被拒绝访问，只作最后的兜底
+        if "windowsapps" in candidate.lower():
+            store_alias = store_alias or candidate
+            continue
+        return candidate
+    return store_alias
+
+
+def _build_douyin_sign_context():
+    js_source = open(_SIGN_JS_PATH, encoding="utf-8-sig").read()
+    node_binary = _resolve_node_binary()
+    if not node_binary:
+        # 找不到 node 时沿用 execjs 的自动探测，由它抛出明确的 RuntimeUnavailableError
+        return execjs.compile(js_source)
+
+    runtime = ExternalRuntime(
+        name="Node.js (V8)",
+        command=[node_binary],
+        encoding="UTF-8",
+        runner_source=_NodeRunnerSource,
+    )
+    if not runtime.is_available():
+        # execjs 靠 PATH + PATHEXT 探测，绝对路径探测不到时会把运行时判为不可用；
+        # 文件已确认存在，这里直接把路径固定给 Popen 使用。
+        runtime._binary_cache = [node_binary]
+        runtime._available = True
+    return runtime.compile(js_source)
+
+
+douyin_sign_obj = _build_douyin_sign_context()
 
 def get_web_id():
     """
@@ -78,7 +136,15 @@ def get_a_bogus_from_js(url: str, params: str, user_agent: str):
     sign_js_name = "sign_datail"
     if "/reply" in url:
         sign_js_name = "sign_reply"
-    return douyin_sign_obj.call(sign_js_name, params, user_agent)
+    try:
+        return douyin_sign_obj.call(sign_js_name, params, user_agent)
+    except PermissionError as e:
+        raise PermissionError(
+            f"无法启动 node 进程执行 {_SIGN_JS_PATH} 计算 a_bogus 签名：{e}。"
+            f"当前使用的 node：{_resolve_node_binary()}。"
+            f"请确认该文件可执行，并检查安全软件/沙箱是否拦截了子进程创建；"
+            f"也可通过环境变量 MEDIACRAWLER_NODE_BIN 指定 node 的绝对路径。"
+        ) from e
 
 
 
@@ -103,11 +169,12 @@ def parse_video_info_from_url(url: str) -> VideoUrlInfo:
     Parse video ID from Douyin video URL
     Supports the following formats:
     1. Normal video link: https://www.douyin.com/video/7525082444551310602
-    2. Link with modal_id parameter:
+    2. Note link: https://www.douyin.com/note/7683551143738633914
+    3. Link with modal_id parameter:
        - https://www.douyin.com/user/MS4wLjABAAAATJPY7LAlaa5X-c8uNdWkvz0jUGgpw4eeXIwu_8BhvqE?modal_id=7525082444551310602
        - https://www.douyin.com/root/search/python?modal_id=7471165520058862848
-    3. Short link: https://v.douyin.com/iF12345ABC/ (requires client parsing)
-    4. Pure ID: 7525082444551310602
+    4. Short link: https://v.douyin.com/iF12345ABC/ (requires client parsing)
+    5. Pure ID: 7525082444551310602
 
     Args:
         url: Douyin video link or ID
@@ -119,7 +186,7 @@ def parse_video_info_from_url(url: str) -> VideoUrlInfo:
         return VideoUrlInfo(aweme_id=url, url_type="normal")
 
     # Check if it's a short link (v.douyin.com)
-    if "v.douyin.com" in url or url.startswith("http") and len(url) < 50 and "video" not in url:
+    if "v.douyin.com" in url:
         return VideoUrlInfo(aweme_id="", url_type="short")  # Requires client parsing
 
     # Try to extract modal_id from URL parameters
@@ -131,6 +198,13 @@ def parse_video_info_from_url(url: str) -> VideoUrlInfo:
     # Extract ID from standard video URL: /video/number
     video_pattern = r'/video/(\d+)'
     match = re.search(video_pattern, url)
+    if match:
+        aweme_id = match.group(1)
+        return VideoUrlInfo(aweme_id=aweme_id, url_type="normal")
+
+    # Extract ID from note URL: /note/number
+    note_pattern = r'/note/(\d+)'
+    match = re.search(note_pattern, url)
     if match:
         aweme_id = match.group(1)
         return VideoUrlInfo(aweme_id=aweme_id, url_type="normal")
